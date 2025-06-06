@@ -1,22 +1,24 @@
 import os
 import base64
 from datetime import datetime
-from googleapiclient.discovery import build
 from googleapiclient.http import MediaIoBaseUpload
 from io import BytesIO
 from utils.auth import get_gmail_service, get_drive_service
 from utils.drive import get_or_create_drive_folder
+from utils.gmail import get_or_create_label, add_label_to_message
 from dotenv import load_dotenv
 
 
 load_dotenv()
 
 LABEL_ID = os.getenv("GMAIL_LABEL")
-PARENT_FOLDER_ID = os.getenv("GDRIVE_FOLDER_ID")
+PARENT_FOLDER_ID = os.getenv("PARENT_FOLDER_ID")
 
 def fetch_attachments_and_upload():
     gmail = get_gmail_service()
     drive = get_drive_service()
+
+    processed_label_id = get_or_create_label(gmail, 'Przetworzone')
 
     results = gmail.users().messages().list(userId='me', labelIds=[LABEL_ID], maxResults=100).execute()
     messages = results.get('messages', [])
@@ -26,6 +28,12 @@ def fetch_attachments_and_upload():
     for msg in messages:
         msg_id = msg['id']
         msg_data = gmail.users().messages().get(userId='me', id=msg_id, format='full').execute()
+
+        # Pomijamy wiadomości, które mają już etykietę "Przetworzone"
+        if processed_label_id in msg_data.get('labelIds', []):
+            print(f"⏭️ Pomijam wiadomość {msg_id} – już oznaczona jako 'Przetworzone'")
+            continue
+
         internal_ts = int(msg_data.get('internalDate')) // 1000
         email_date = datetime.fromtimestamp(internal_ts)
 
@@ -52,7 +60,6 @@ def fetch_attachments_and_upload():
             file_data = base64.urlsafe_b64decode(attachment['data'].encode('utf-8'))
             media = MediaIoBaseUpload(BytesIO(file_data), mimetype=mime_type)
 
-            # 🔧 Foldery: '2025' ➝ '06-2025'
             year_folder_name = str(email_date.year)
             month_folder_name = email_date.strftime("%m-%Y")
 
@@ -69,3 +76,6 @@ def fetch_attachments_and_upload():
             ).execute()
 
             print(f"✅ Zapisano plik: {filename} ➝ {month_folder_name} ({uploaded_file['id']})")
+
+        # Po przetworzeniu wiadomości ➝ oznacz jako „Przetworzone”
+        add_label_to_message(gmail, msg_id, processed_label_id)

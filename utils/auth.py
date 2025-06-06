@@ -2,11 +2,15 @@ import os
 from google.oauth2.credentials import Credentials
 from google_auth_oauthlib.flow import InstalledAppFlow
 from googleapiclient.discovery import build
+from dotenv import load_dotenv
 
-SCOPES = [
-    'https://www.googleapis.com/auth/gmail.readonly',
-    'https://www.googleapis.com/auth/drive.file'
-]
+load_dotenv()
+
+drive_scopes = os.getenv("GOOGLE_DRIVE_SCOPES", "").split(",")
+gmail_scopes = os.getenv("GMAIL_SCOPES", "").split(",")
+
+SCOPES = [scope.strip() for scope in drive_scopes + gmail_scopes if scope.strip()]
+
 
 def get_credentials():
     creds = None

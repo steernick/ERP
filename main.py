@@ -1,11 +1,4 @@
-from gmail.invoice_downloader import fetch_attachments_and_upload
-# from invoice_parser.parser import process_invoices
-
-def print_labels(service):
-    response = service.users().labels().list(userId='me').execute()
-    labels = response.get('labels', [])
-    for label in labels:
-        print(f"Name: {label['name']}, ID: {label['id']}")
+from gmail.invoice_downloader import fetch_attachments_and_upload\
 
 
 if __name__ == "__main__":
