@@ -1,3 +1,38 @@
+import os
+from googleapiclient.http import MediaIoBaseDownload
+from auth import get_drive_service
+import io
+
+def list_monthly_folders(parent_folder_id):
+    service = get_drive_service()
+    results = service.files().list(
+        q=f"'{parent_folder_id}' in parents and mimeType='application/vnd.google-apps.folder'",
+        fields="files(id, name)"
+    ).execute()
+    return results.get('files', [])
+
+def list_pdf_files_in_folder(folder_id):
+    service = get_drive_service()
+    results = service.files().list(
+        q=f"'{folder_id}' in parents and mimeType='application/pdf'",
+        fields="files(id, name)"
+    ).execute()
+    return results.get('files', [])
+
+def download_file(file_id, filename):
+    service = get_drive_service()
+    request = service.files().get_media(fileId=file_id)
+    fh = io.FileIO(filename, 'wb')
+    downloader = MediaIoBaseDownload(fh, request)
+    done = False
+    while done is False:
+        status, done = downloader.next_chunk()
+    return filename
+
+def rename_drive_file(file_id, new_name):
+    service = get_drive_service()
+    return service.files().update(fileId=file_id, body={"name": new_name}).execute()
+
 def get_or_create_drive_folder(drive, folder_name: str, parent_id: str = None) -> str:
     """
     Tworzy folder na Google Drive lub zwraca ID istniejącego folderu o tej samej nazwie w danym folderze nadrzędnym.
@@ -31,3 +66,4 @@ def get_or_create_drive_folder(drive, folder_name: str, parent_id: str = None) -
 
     folder = drive.files().create(body=metadata, fields='id').execute()
     return folder.get('id')
+
