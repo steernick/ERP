@@ -8,8 +8,9 @@ load_dotenv()
 
 drive_scopes = os.getenv("GOOGLE_DRIVE_SCOPES", "").split(",")
 gmail_scopes = os.getenv("GMAIL_SCOPES", "").split(",")
+sheets_scopes = os.getenv("SHEETS_SCOPES", "").split(",")
 
-SCOPES = [scope.strip() for scope in drive_scopes + gmail_scopes if scope.strip()]
+SCOPES = [scope.strip() for scope in drive_scopes + gmail_scopes + sheets_scopes if scope.strip()]
 
 
 def get_credentials():
@@ -28,3 +29,6 @@ def get_gmail_service():
 
 def get_drive_service():
     return build('drive', 'v3', credentials=get_credentials())
+
+def get_sheets_service():
+    return build('sheets', 'v4', credentials=get_credentials())

@@ -1,7 +1,7 @@
-import os
 from googleapiclient.http import MediaIoBaseDownload
-from auth import get_drive_service
-import io
+from .auth import get_drive_service
+from googleapiclient.http import MediaIoBaseUpload
+from io import BytesIO, FileIO
 
 def list_monthly_folders(parent_folder_id):
     service = get_drive_service()
@@ -22,7 +22,7 @@ def list_pdf_files_in_folder(folder_id):
 def download_file(file_id, filename):
     service = get_drive_service()
     request = service.files().get_media(fileId=file_id)
-    fh = io.FileIO(filename, 'wb')
+    fh = FileIO(filename, 'wb')
     downloader = MediaIoBaseDownload(fh, request)
     done = False
     while done is False:
@@ -67,3 +67,18 @@ def get_or_create_drive_folder(drive, folder_name: str, parent_id: str = None) -
     folder = drive.files().create(body=metadata, fields='id').execute()
     return folder.get('id')
 
+def upload_file_to_drive(drive, file_content, filename, parent_folder_id):
+
+    media = MediaIoBaseUpload(BytesIO(file_content), mimetype='application/pdf')
+
+    file_metadata = {
+        'name': filename,
+        'parents': [parent_folder_id],
+    }
+
+    uploaded_file = drive.files().create(
+        body=file_metadata, media_body=media, fields='id'
+    ).execute()
+
+    print(f"✅ Zapisano plik: {filename} ({uploaded_file['id']})")
+    return uploaded_file['id']

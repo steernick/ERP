@@ -1,22 +1,25 @@
 import os
 import base64
 from datetime import datetime
-from googleapiclient.http import MediaIoBaseUpload
-from io import BytesIO
-from utils.auth import get_gmail_service, get_drive_service
-from utils.drive import get_or_create_drive_folder
+from utils.auth import get_gmail_service, get_drive_service, get_sheets_service
+from utils.drive import get_or_create_drive_folder, upload_file_to_drive
 from utils.gmail import get_or_create_label, add_label_to_message
+from utils.sheets import initialize_sheet_with_headers, add_invoice_data_to_sheets
 from dotenv import load_dotenv
+from deepseek_extractor import extract_invoice_data_from_bytes
 
 
 load_dotenv()
 
 LABEL_ID = os.getenv("GMAIL_LABEL")
 PARENT_FOLDER_ID = os.getenv("PARENT_FOLDER_ID")
+SPREADSHEET_ID = os.getenv("SPREADSHEET_ID")
 
-def fetch_attachments_and_upload():
+
+def fetch_attachments_and_process():
     gmail = get_gmail_service()
     drive = get_drive_service()
+    sheets = get_sheets_service()
 
     processed_label_id = get_or_create_label(gmail, 'Przetworzone')
 
@@ -29,7 +32,6 @@ def fetch_attachments_and_upload():
         msg_id = msg['id']
         msg_data = gmail.users().messages().get(userId='me', id=msg_id, format='full').execute()
 
-        # Pomijamy wiadomości, które mają już etykietę "Przetworzone"
         if processed_label_id in msg_data.get('labelIds', []):
             print(f"⏭️ Pomijam wiadomość {msg_id} – już oznaczona jako 'Przetworzone'")
             continue
@@ -44,13 +46,10 @@ def fetch_attachments_and_upload():
 
         for i, part in enumerate(parts):
             filename = part.get('filename', '')
-            mime_type = part.get('mimeType')
             body = part.get('body', {})
             attachment_id = body.get('attachmentId')
 
-            print(f"  Część {i}: mimeType={mime_type}, filename={filename}, body keys={body.keys()}")
-
-            if not attachment_id or not filename:
+            if not attachment_id or not filename or not filename.lower().endswith('.pdf'):
                 continue
 
             attachment = gmail.users().messages().attachments().get(
@@ -58,24 +57,31 @@ def fetch_attachments_and_upload():
             ).execute()
 
             file_data = base64.urlsafe_b64decode(attachment['data'].encode('utf-8'))
-            media = MediaIoBaseUpload(BytesIO(file_data), mimetype=mime_type)
 
+            # 1. Wyciągnij dane z faktury przez Gemini AI
+            invoice_data = extract_invoice_data_from_bytes(file_data)
+
+            if not invoice_data:
+                print(f"⚠️ Nie udało się wyciągnąć danych z faktury: {filename}")
+                continue
+
+            new_filename = f"{invoice_data.get('sprzedawca', 'unknown')}-{invoice_data.get('numer faktury', 'unknown')}.pdf"
+
+            # 3. Foldery na Drive
             year_folder_name = str(email_date.year)
             month_folder_name = email_date.strftime("%m-%Y")
 
             year_folder_id = get_or_create_drive_folder(drive, year_folder_name, PARENT_FOLDER_ID)
             target_folder_id = get_or_create_drive_folder(drive, month_folder_name, year_folder_id)
 
-            file_metadata = {
-                'name': filename,
-                'parents': [target_folder_id],
-            }
+            # 4. Upload pliku z nową nazwą
+            upload_file_to_drive(drive, file_data, new_filename, target_folder_id)
 
-            uploaded_file = drive.files().create(
-                body=file_metadata, media_body=media, fields='id'
-            ).execute()
+            # 5. Dodanie nagłówków w pliku
+            initialize_sheet_with_headers(sheets, SPREADSHEET_ID)
 
-            print(f"✅ Zapisano plik: {filename} ➝ {month_folder_name} ({uploaded_file['id']})")
+            # 6. Zapis danych do Google Sheets
+            add_invoice_data_to_sheets(sheets, SPREADSHEET_ID, invoice_data)
 
-        # Po przetworzeniu wiadomości ➝ oznacz jako „Przetworzone”
+        # Po przetworzeniu wiadomości oznacz jako „Przetworzone”
         add_label_to_message(gmail, msg_id, processed_label_id)

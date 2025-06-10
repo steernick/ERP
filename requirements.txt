@@ -1,9 +1,11 @@
 generativeai
-google-api-python-client
+google-api-python-client~=2.171.0
 google-auth
-google-auth-oauthlib
+google-auth-oauthlib~=1.2.2
 google-auth-httplib2
 gspread
 oauth2client
-python-dotenv
-PyPDF2
+python-dotenv~=1.1.0
+pdfplumber
+protobuf~=5.29.3
+openai~=1.84.0
