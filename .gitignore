@@ -3,3 +3,6 @@
 /credentials/
 /data
 /invoice_parser/
+/gmail/__pycache__/
+/__pycache__/
+/utils/__pycache__/
